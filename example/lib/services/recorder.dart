@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:audio_streamer/audio_streamer.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_silero_vad/flutter_silero_vad.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -13,8 +12,6 @@ import 'package:permission_handler/permission_handler.dart';
 class RecorderService {
   final recorder = AudioStreamer.instance;
   final vad = FlutterSileroVad();
-  Future<String> get modelPath async =>
-      '${(await getApplicationSupportDirectory()).path}/silero_vad.v5.onnx';
   final sampleRate = 16000;
   final frameSize = 40; // 80ms
 
@@ -68,16 +65,15 @@ class RecorderService {
   Future<void> record(StreamController<List<int>> controller) async {
     assert(isInited);
 
-    await recorder.startRecording();
-    await onnxModelToLocal();
     await vad.initialize(
-      modelPath: await modelPath,
       sampleRate: sampleRate,
       frameSize: frameSize,
       threshold: 0.7,
       minSilenceDurationMs: 100,
       speechPadMs: 0,
     );
+    await recorder.startRecording();
+
     recordingDataSubscription = recorder.audioStream.listen((buffer) async {
       final data = _transformBuffer(buffer);
       if (data.isEmpty) return;
@@ -218,13 +214,5 @@ class RecorderService {
       ..setUint32(40, pcmBytes.length, Endian.little); // Subchunk2Size
 
     File(filePath).writeAsBytesSync(wavHeader.buffer.asUint8List() + pcmBytes);
-  }
-
-  /// アセットからアプリケーションディレクトリにファイルをコピーする
-  Future<void> onnxModelToLocal() async {
-    final data = await rootBundle.load('assets/silero_vad.v5.onnx');
-    final bytes =
-        data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    File(await modelPath).writeAsBytesSync(bytes);
   }
 }
